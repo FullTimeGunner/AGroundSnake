@@ -1,236 +1,157 @@
-# modified at 2023/05/18 22::25
 import os
 import time
 import datetime
 import feather
-import requests
 import pandas as pd
+import tushare as ts
 from loguru import logger
-from requests import RequestException
-import analysis.base
+import analysis
 from analysis.const import (
+    time_pm_end,
+    dt_pm_end,
+    dt_init,
     path_data,
     str_date_path,
+    str_date_trading,
+    dt_date_trading,
     filename_chip_shelve,
-    dt_pm_end,
-    list_all_stocks,
 )
-
-
-def code_id_map_em() -> dict:
-    """
-    东方财富-股票和市场代码
-    http://quote.eastmoney.com/center/gridlist.html#hs_a_board
-    :return: 股票和市场代码
-    :rtype: dict
-    """
-    url = "http://80.push2.eastmoney.com/api/qt/clist/get"
-    params = {
-        "pn": "1",
-        "pz": "50000",
-        "po": "1",
-        "np": "1",
-        "ut": "bd1d9ddb04089700cf9c27f6f7426281",
-        "fltt": "2",
-        "invt": "2",
-        "fid": "f3",
-        "fs": "m:1 t:2,m:1 t:23",
-        "fields": "f12",
-        "_": "1623833739532",
-    }
-    r = requests.get(url, params=params)
-    data_json = r.json()
-    if not data_json["data"]["diff"]:
-        return dict()
-    temp_df = pd.DataFrame(data_json["data"]["diff"])
-    temp_df["market_id"] = 1
-    temp_df.columns = ["sh_code", "sh_id"]
-    dict_code_id = dict(zip(temp_df["sh_code"], temp_df["sh_id"]))
-    params = {
-        "pn": "1",
-        "pz": "50000",
-        "po": "1",
-        "np": "1",
-        "ut": "bd1d9ddb04089700cf9c27f6f7426281",
-        "fltt": "2",
-        "invt": "2",
-        "fid": "f3",
-        "fs": "m:0 t:6,m:0 t:80",
-        "fields": "f12",
-        "_": "1623833739532",
-    }
-    r = requests.get(url, params=params)
-    data_json = r.json()
-    if not data_json["data"]["diff"]:
-        return dict()
-    temp_df_sz = pd.DataFrame(data_json["data"]["diff"])
-    temp_df_sz["sz_id"] = 0
-    dict_code_id.update(dict(zip(temp_df_sz["f12"], temp_df_sz["sz_id"])))
-    params = {
-        "pn": "1",
-        "pz": "50000",
-        "po": "1",
-        "np": "1",
-        "ut": "bd1d9ddb04089700cf9c27f6f7426281",
-        "fltt": "2",
-        "invt": "2",
-        "fid": "f3",
-        "fs": "m:0 t:81 s:2048",
-        "fields": "f12",
-        "_": "1623833739532",
-    }
-    r = requests.get(url, params=params)
-    data_json = r.json()
-    if not data_json["data"]["diff"]:
-        return dict()
-    temp_df_sz = pd.DataFrame(data_json["data"]["diff"])
-    temp_df_sz["bj_id"] = 0
-    dict_code_id.update(dict(zip(temp_df_sz["f12"], temp_df_sz["bj_id"])))
-    return dict_code_id
-
-
-code_id_dict = code_id_map_em()
-
-
-def stock_individual_info(code: str = "603777") -> pd.DataFrame:
-    """
-    东方财富-个股-股票信息
-    http://quote.eastmoney.com/concept/sh603777.html?from=classic
-    http://push2.eastmoney.com/api/qt/stock/get?ut=fa5fd1943c7b386f172d6893dbfba10b&fltt=2&invt=2&fields=f120%2Cf121%2Cf122%2Cf174%2Cf175%2Cf59%2Cf163%2Cf43%2Cf57%2Cf58%2Cf169%2Cf170%2Cf46%2Cf44%2Cf51%2Cf168%2Cf47%2Cf164%2Cf116%2Cf60%2Cf45%2Cf52%2Cf50%2Cf48%2Cf167%2Cf117%2Cf71%2Cf161%2Cf49%2Cf530%2Cf135%2Cf136%2Cf137%2Cf138%2Cf139%2Cf141%2Cf142%2Cf144%2Cf145%2Cf147%2Cf148%2Cf140%2Cf143%2Cf146%2Cf149%2Cf55%2Cf62%2Cf162%2Cf92%2Cf173%2Cf104%2Cf105%2Cf84%2Cf85%2Cf183%2Cf184%2Cf185%2Cf186%2Cf187%2Cf188%2Cf189%2Cf190%2Cf191%2Cf192%2Cf107%2Cf111%2Cf86%2Cf177%2Cf78%2Cf110%2Cf262%2Cf263%2Cf264%2Cf267%2Cf268%2Cf255%2Cf256%2Cf257%2Cf258%2Cf127%2Cf199%2Cf128%2Cf198%2Cf259%2Cf260%2Cf261%2Cf171%2Cf277%2Cf278%2Cf279%2Cf288%2Cf152%2Cf250%2Cf251%2Cf252%2Cf253%2Cf254%2Cf269%2Cf270%2Cf271%2Cf272%2Cf273%2Cf274%2Cf275%2Cf276%2Cf265%2Cf266%2Cf289%2Cf290%2Cf286%2Cf285%2Cf292%2Cf293%2Cf294%2Cf295&secid=1.603777&_=1640157544804
-    :param code: 股票代码
-    :type code: str
-    :return: 股票信息
-    :rtype: pandas.DataFrame
-    """
-    url = "http://push2.eastmoney.com/api/qt/stock/get"
-    params = {
-        "ut": "fa5fd1943c7b386f172d6893dbfba10b",
-        "fltt": "2",
-        "invt": "2",
-        "fields": "f57,f58,f84,f85,f116,f189",
-        "secid": f"{code_id_dict[code]}.{code}",
-        "_": "1640157544804",
-    }
-    while True:
-        try:
-            r = requests.get(url, params=params)
-        except RequestException as e:
-            print(repr(e))
-            logger.trace(repr(e))
-            time.sleep(2)
-        else:
-            break
-    data_json = r.json()
-    temp_df = pd.DataFrame(data_json)
-    temp_df.reset_index(inplace=True)
-    del temp_df["rc"]
-    del temp_df["rt"]
-    del temp_df["svr"]
-    del temp_df["lt"]
-    del temp_df["full"]
-    if "dlmkts" in temp_df.columns:
-        del temp_df["dlmkts"]
-    code_name_map = {
-        "f57": "code",
-        "f58": "name",
-        "f84": "total_cap",
-        "f85": "circ_cap",
-        "f116": "total_mv_E",
-        "f189": "list_date",
-    }
-    temp_df["index"] = temp_df["index"].map(code_name_map)
-    temp_df = temp_df[pd.notna(temp_df["index"])]
-    list_columns = temp_df["index"].to_list()
-    list_data = temp_df["data"].to_list()
-    df_return = pd.DataFrame(columns=list_columns)
-    count = len(list_data)
-    for i in range(count):
-        if list_data[i] == "-":
-            list_data[i] = None
-    df_return.loc[0] = list_data
-    if df_return.at[0, "list_date"] is not None:
-        str_list_date = str(df_return.at[0, "list_date"])
-        df_return.at[0, "list_date"] = datetime.datetime.strptime(
-            str_list_date, "%Y%m%d"
-        )
-    df_return.set_index(keys="code", inplace=True)
-    df_return["total_mv_E"] = df_return["total_mv_E"].apply(
-        func=lambda x: round(x / 100000000, 2)
-    )
-    df_return = df_return.reindex(
-        columns=["name", "list_date", "total_cap", "circ_cap", "total_mv_E"]
-    )
-    df_return["list_date"] = df_return["list_date"].apply(func=lambda x: x.date())
-    return df_return
 
 
 def capital() -> bool:
     name: str = "df_cap"
     start_loop_time = time.perf_counter_ns()
-    filename_cap_feather_temp = os.path.join(
-        path_data, f"capital_temp_{str_date_path()}.ftr"
-    )
-    list_cap_exist = list()
-    df_cap = pd.DataFrame()
     if analysis.base.is_latest_version(key=name, filename=filename_chip_shelve):
         logger.trace(f"capital Break End")
         return True
+    pro = ts.pro_api()
+    filename_cap_feather_temp = os.path.join(
+        path_data, f"capital_temp_{str_date_path()}.ftr"
+    )
     if os.path.exists(filename_cap_feather_temp):
-        logger.trace(f"[{filename_cap_feather_temp}] exists")
         df_cap = feather.read_dataframe(source=filename_cap_feather_temp)
-        if df_cap.empty:
-            logger.trace(f"{name} cache is empty")
-        else:
-            logger.trace(f"{name} cache is not empty")
-            df_cap = df_cap.sample(frac=1)
-            list_cap_exist = df_cap.index.to_list()
+    else:
+        df_stock_basic = pro.stock_basic(
+            exchange="", list_status="L", fields="ts_code,name,list_date"
+        )
+        df_stock_basic["ts_code"] = df_stock_basic["ts_code"].apply(
+            func=lambda x: x[7:].lower() + x[:6]
+        )
+        df_stock_basic["list_date"] = df_stock_basic["list_date"].apply(
+            func=lambda x: pd.to_datetime(x)
+        )
+        df_stock_basic.set_index(keys="ts_code", inplace=True)
+        df_daily_basic = pro.daily_basic(
+            ts_code="",
+            trade_date=str_date_trading,
+            fields="trade_date,ts_code,float_share,total_share,total_mv",
+        )
+        df_daily_basic["ts_code"] = df_daily_basic["ts_code"].apply(
+            func=lambda x: x[7:].lower() + x[:6]
+        )
+        df_daily_basic["trade_date"] = df_daily_basic["trade_date"].apply(
+            func=lambda x: datetime.datetime.combine(
+                pd.to_datetime(x).date(), time_pm_end
+            )
+        )
+        df_daily_basic.set_index(keys="ts_code", inplace=True)
+        df_cap = pd.concat(
+            objs=[
+                df_stock_basic,
+                df_daily_basic,
+            ],
+            axis=1,
+            join="outer",
+        )
+        df_cap.index.name = ""
+        df_cap.rename(
+            columns={
+                "total_share": "total_cap",
+                "float_share": "circ_cap",
+                "total_mv": "total_mv_E",
+            },
+            inplace=True,
+        )
+        df_cap["trade_date"].fillna(value=dt_init, inplace=True)
+        df_cap["total_cap"].fillna(value=0.0, inplace=True)
+        df_cap["circ_cap"].fillna(value=0.0, inplace=True)
+        df_cap["total_mv_E"].fillna(value=0.0, inplace=True)
+        df_cap["list_days"] = df_cap["trade_date"] - df_cap["list_date"]
+        df_cap["list_days"] = df_cap["list_days"].apply(func=lambda x: x.days)
+        df_cap["total_cap"] = df_cap["total_cap"] * 10000
+        df_cap["circ_cap"] = df_cap["circ_cap"] * 10000
+        df_cap["total_mv_E"] = round(df_cap["total_mv_E"] / 10000, 2)
+    if df_cap.empty:
+        return False
+    df_cap = df_cap.sample(frac=1)
+    dt_trader = df_cap["trade_date"].max()
+    dt_delta = dt_date_trading - datetime.timedelta(days=366)
+    str_delta = dt_delta.strftime("%Y%m%d")
     i = 0
-    count = len(list_all_stocks)
-    for symbol in list_all_stocks:
+    count = len(df_cap)
+    for symbol in df_cap.index:
         i += 1
-        str_msg_bar = f"Capital Update: [{i:4d}/{count:4d}] -- [{symbol}]"
-        if symbol in list_cap_exist:
-            print(f"\r{str_msg_bar} - exist\033[K", end="")
+        if df_cap.at[symbol, "trade_date"] != dt_init:
             continue
-        code = symbol[2:]
-        df_cap_temp = pd.DataFrame()
+        feather.write_dataframe(df=df_cap, dest=filename_cap_feather_temp)
+        str_msg_bar = f"Capital Update: [{i:4d}/{count:4d}] - [{symbol}]"
+        ts_code = symbol[2:] + "." + symbol[:2].upper()
+        df_daily_basic = pd.DataFrame()
         i_times = 0
         while i_times < 2:
             i_times += 1
             try:
-                df_cap_temp = stock_individual_info(code=code)
+                df_daily_basic = pro.daily_basic(
+                    ts_code=ts_code,
+                    start_date=str_delta,
+                    end_date=str_date_trading,
+                    fields="trade_date,ts_code,float_share,total_share,total_mv",
+                )
             except KeyError as e:
                 print(f"\r{str_msg_bar} - {repr(e)}\033[K")
-                break
+                time.sleep(1)
             except ConnectionError as e:
                 print(f"\r{str_msg_bar} - [Error={i_times}] - {repr(e)}\033[K")
                 time.sleep(1)
             else:
-                if df_cap_temp.empty:
+                if df_daily_basic.empty:
                     print(f"\r{str_msg_bar} - [Empty={i_times}]\033[K")
                     time.sleep(1)
                 else:
                     break
-        if not df_cap_temp.empty:
-            if df_cap.empty:
-                df_cap = pd.DataFrame(columns=df_cap_temp.columns)
-            df_cap.loc[symbol] = df_cap_temp.loc[code]
-            print(f"\r{str_msg_bar} - update\033[K", end="")
-        else:
-            print(f"\r{str_msg_bar} - None\033[K")
-        feather.write_dataframe(df=df_cap, dest=filename_cap_feather_temp)
+        if df_daily_basic.empty:
+            df_cap.drop(index=symbol, inplace=True)
+            print(f"{str_msg_bar} - drop\033[K")
+            continue
+        df_daily_basic["trade_date"] = df_daily_basic["trade_date"].apply(
+            func=lambda x: datetime.datetime.combine(
+                pd.to_datetime(x).date(), time_pm_end
+            )
+        )
+        df_daily_basic.set_index(keys="trade_date", inplace=True)
+        dt_max = df_daily_basic.index.max()
+        print(f"\r{str_msg_bar} - {dt_max.date()}\033[K")
+        df_cap.at[symbol, "trade_date"] = dt_max
+        df_cap.at[symbol, "total_cap"] = df_daily_basic.at[dt_max, "total_share"]
+        df_cap.at[symbol, "circ_cap"] = df_daily_basic.at[dt_max, "float_share"]
+        df_cap.at[symbol, "total_mv_E"] = round(
+            df_daily_basic.at[dt_max, "total_mv"] / 10000, 2
+        )
+        df_cap.at[symbol, "list_days"] = (
+                dt_trader - df_cap.at[symbol, "list_date"]
+        ).days
+    df_cap = df_cap.reindex(
+        columns=["name", "list_days", "total_cap", "circ_cap", "total_mv_E"]
+    )
     if i >= count:
         print("\n", end="")  # 格式处理
         analysis.base.write_obj_to_db(
             obj=df_cap, key=name, filename=filename_chip_shelve
         )
-        dt_now = datetime.datetime.now()
-        if dt_now > dt_pm_end:
-            analysis.base.set_version(key=name, dt=dt_pm_end)
-        logger.trace(f"Update df_config-[{name}]")
+        if dt_trader == dt_pm_end:
+            analysis.base.set_version(key=name, dt=dt_trader)
         if os.path.exists(filename_cap_feather_temp):  # 删除临时文件
             os.remove(path=filename_cap_feather_temp)
-            logger.trace(f"[{filename_cap_feather_temp}] remove")
     end_loop_time = time.perf_counter_ns()
     interval_time = (end_loop_time - start_loop_time) / 1000000000
     str_gm = time.strftime("%H:%M:%S", time.gmtime(interval_time))

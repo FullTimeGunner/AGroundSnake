@@ -7,15 +7,13 @@ from loguru import logger
 import analysis.ashare
 import analysis.base
 from analysis.const import (
-    dt_date_init,
+    dt_init,
     time_pm_end,
     dt_am_1015,
     dt_am_end,
     dt_pm_start,
     dt_pm_end,
     dt_pm_end_last_1T,
-    dt_date_trading,
-    dt_date_trading_last_1T,
     list_all_stocks,
     filename_chip_shelve,
     filename_concentration_rate_charts,
@@ -295,7 +293,8 @@ def concentration() -> bool:
             columns=[
                 "first_concentration",
                 "latest_concentration",
-                "days_concentration",
+                "days_first_concentration",
+                "days_latest_concentration",
                 "times_concentration",
                 "rate_concentration",
             ],
@@ -307,48 +306,51 @@ def concentration() -> bool:
             axis=1,
             join="outer",
         )
-    df_concentration["first_concentration"].fillna(value=dt_date_init, inplace=True)
-    df_concentration["latest_concentration"].fillna(value=dt_date_init, inplace=True)
-    df_concentration["days_concentration"].fillna(value=0, inplace=True)
+    df_concentration = df_concentration[
+        df_concentration.index.isin(values=list_all_stocks)
+    ]
+    df_concentration["first_concentration"].fillna(value=dt_init, inplace=True)
+    df_concentration["latest_concentration"].fillna(value=dt_init, inplace=True)
+    df_concentration["days_first_concentration"].fillna(value=0, inplace=True)
+    df_concentration["days_latest_concentration"].fillna(value=0, inplace=True)
     df_concentration["times_concentration"].fillna(value=0, inplace=True)
     df_concentration["rate_concentration"].fillna(value=0, inplace=True)
+    dt_now = datetime.datetime.now()
     if dt_pm_end_last_1T < datetime.datetime.now() <= dt_pm_end:
-        date_latest = dt_date_trading_last_1T
+        dt_latest = dt_pm_end_last_1T
     else:
-        date_latest = dt_date_trading
+        dt_latest = dt_pm_end
     for symbol in df_concentration.index:
         if symbol in df_realtime_top5.index:
-            if df_concentration.at[symbol, "first_concentration"] == dt_date_init:
+            if df_concentration.at[symbol, "first_concentration"] == dt_init:
                 df_concentration.at[
                     symbol, "first_concentration"
-                ] = df_concentration.at[symbol, "latest_concentration"] = date_latest
-                df_concentration.at[symbol, "days_concentration"] = 1
+                ] = df_concentration.at[symbol, "latest_concentration"] = dt_latest
                 df_concentration.at[symbol, "times_concentration"] = 1
             else:
-                if df_concentration.at[symbol, "latest_concentration"] != date_latest:
-                    df_concentration.at[symbol, "latest_concentration"] = date_latest
+                if df_concentration.at[symbol, "latest_concentration"] != dt_latest:
+                    df_concentration.at[symbol, "latest_concentration"] = dt_latest
                     df_concentration.at[symbol, "times_concentration"] += 1
-                df_concentration.at[symbol, "days_concentration"] = (
-                    df_concentration.at[symbol, "latest_concentration"]
-                    - df_concentration.at[symbol, "first_concentration"]
-                ).days + 1
-        if df_concentration.at[symbol, "first_concentration"] == dt_date_init:
-            df_concentration.at[symbol, "rate_concentration"] = 0
-        else:
-            days_concentration = (
-                df_concentration.at[symbol, "days_concentration"] // 7 * 5
-                + df_concentration.at[symbol, "days_concentration"] % 7
-            )  # 修正除数，尽可能趋近交易日
-            if days_concentration > 0:
+        if df_concentration.at[symbol, "first_concentration"] != dt_init:
+            df_concentration.at[
+                symbol, "days_first_concentration"
+            ] = days_first_concentration = (
+                dt_now - df_concentration.at[symbol, "first_concentration"]
+            ).days + 1
+            df_concentration.at[symbol, "days_latest_concentration"] = (
+                dt_now - df_concentration.at[symbol, "latest_concentration"]
+            ).days + 1
+            # 修正除数，尽可能趋近交易日
+            days_first_concentration = (
+                days_first_concentration // 7 * 5 + days_first_concentration % 7
+            )
+            if days_first_concentration > 0:
                 df_concentration.at[symbol, "rate_concentration"] = round(
                     df_concentration.at[symbol, "times_concentration"]
-                    / days_concentration
+                    / days_first_concentration
                     * 100,
                     2,
                 )
-            else:
-                logger.error(f"{symbol} [days_concentration] is zero")
-                df_concentration.at[symbol, "rate_concentration"] = 0
     df_concentration.sort_values(
         by=["times_concentration"], ascending=False, inplace=True
     )
@@ -358,11 +360,11 @@ def concentration() -> bool:
         filename=filename_chip_shelve,
     )
     dt_concentration_date = df_concentration["latest_concentration"].max(skipna=True)
-    if dt_concentration_date > date_latest:
+    if dt_concentration_date > dt_latest:
         logger.error(
             f"Error - dt_concentration_date[{dt_concentration_date}] greater then date_latest"
         )
-        dt_concentration_date = date_latest
+        dt_concentration_date = dt_latest
     dt_concentration = datetime.datetime.combine(dt_concentration_date, time_pm_end)
     analysis.base.set_version(key=name, dt=dt_concentration)
     return True

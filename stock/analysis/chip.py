@@ -6,7 +6,7 @@ import pandas as pd
 from pandas import DataFrame
 from loguru import logger
 import analysis.base
-import analysis.golden
+import analysis.g_price
 import analysis.limit
 import analysis.update_data
 import analysis.capital
@@ -14,14 +14,13 @@ import analysis.st
 import analysis.industry
 import analysis.index
 import analysis.concentration
-from analysis.const import filename_chip_shelve, filename_chip_excel, dt_date_trading
+from analysis.const import filename_chip_shelve, filename_chip_excel
 
 
 def chip() -> object | DataFrame:
     name: str = "df_chip"
     logger.trace(f"{name} Begin")
     start_loop_time = time.perf_counter_ns()
-    dt_init = datetime.datetime(year=1989, month=1, day=1)
     if analysis.base.is_latest_version(key=name, filename=filename_chip_shelve):
         df_chip = analysis.base.read_df_from_db(key=name, filename=filename_chip_shelve)
         logger.trace(f"{name} Break End")
@@ -29,7 +28,7 @@ def chip() -> object | DataFrame:
     logger.trace(f"Update {name}")
     analysis.update_data.update_index_data(symbol="sh000001")
     analysis.update_data.update_index_data(symbol="sh000852")
-    if analysis.golden.golden_price():
+    if analysis.g_price.golden_price():
         df_golden = analysis.base.read_df_from_db(
             key="df_golden", filename=filename_chip_shelve
         )
@@ -75,6 +74,8 @@ def chip() -> object | DataFrame:
             print("Sleep 1 hour")
             dt_now_delta = datetime.datetime.now() + datetime.timedelta(seconds=3600)
             analysis.base.sleep_to_time(dt_time=dt_now_delta, seconds=10)
+    if analysis.industry.reset_industry_member():
+        pass
     if analysis.base.is_latest_version(
         key="df_stocks_in_ssb", filename=filename_chip_shelve
     ):
@@ -83,8 +84,6 @@ def chip() -> object | DataFrame:
         index_ssb = analysis.index.IndexSSB(update=True)
         dt_stocks_in_ssb = index_ssb.version()
         analysis.base.set_version(key="df_stocks_in_ssb", dt=dt_stocks_in_ssb)
-    if analysis.industry.reset_industry_member():
-        pass
     df_stocks_in_ssb = index_ssb.stocks_in_ssb()
     if analysis.concentration():
         df_concentration = analysis.base.read_df_from_db(
@@ -114,65 +113,45 @@ def chip() -> object | DataFrame:
         axis=1,
         join="outer",
     )
-    df_chip["list_date"].fillna(value=dt_date_trading, inplace=True)
-    df_chip["list_date"] = df_chip["list_date"].apply(
-        func=lambda x: (dt_date_trading - x).days
-    )
-    df_chip.rename(columns={"list_date": "list_days"}, inplace=True)
-    df_chip["turnover"] = df_chip["total_volume"] / (df_chip["circ_cap"] / 100)
-    df_chip["turnover"] = df_chip["turnover"].apply(func=lambda x: round(x, 2))
-    df_chip["turnover"].fillna(value=0, inplace=True)
-    df_chip.sort_values(by=["T5_pct"], ascending=False, inplace=True)
-    df_chip["dt"].fillna(value=dt_init, inplace=True)
     analysis.base.write_obj_to_db(obj=df_chip, key=name, filename=filename_chip_shelve)
-    logger.trace(f"{name} save as [db_chip]")
     df_g_price_1 = df_chip[
         (df_chip["now_price_ratio"] <= 71.8) & (df_chip["now_price_ratio"] >= 51.8)
     ]
-    # df_g_price_1 = df_g_price_1.copy()
-    df_up_a_down_5pct_2 = df_chip[(df_chip["up_A_down_5pct"] >= 48)]
-    df_tm_grade_3 = df_chip[
-        (df_chip["T_m_pct_grade"] <= 38.2) & (df_chip["T_m_amplitude_grade"] <= 38.2)
+    df_limit_2 = df_chip[
+        (df_chip["correct_3pct_times"] >= 40)
+        & (df_chip["alpha_pct"] >= 10)
+        & (df_chip["alpha_amplitude"] >= 0)
+        & (df_chip["alpha_turnover"] >= 0)
     ]
-    df_t5_pct_4 = df_chip[
-        (df_chip["T_m_pct"] >= 10)
-        & (df_chip["T5_pct"] >= 10)
-        & (df_chip["T20_pct"] >= 10)
+    df_exceed_industry_3 = df_chip[
+        (df_chip["times_exceed_correct_industry"] >= 70)
+        & (df_chip["mean_exceed_correct_industry"] >= 1.5)
     ]
-    df_t5_amplitude_5 = df_chip[
-        (df_chip["T_m_amplitude"] >= 5)
-        & (df_chip["T5_amplitude"] >= 5)
-        & (df_chip["T20_amplitude"] >= 5)
-    ]
-    df_turnover_6 = df_chip[(df_chip["turnover"] >= 10)]
-    df_alpha_7 = df_chip[
-        (df_chip["alpha_times"] >= 70) & (df_chip["alpha_mean"] >= 1.5)
+    df_concentration_4 = df_chip[
+        (df_chip["rate_concentration"] >= 50)
+        & (df_chip["days_latest_concentration"] <= 30)
     ]
     df_stocks_pool = pd.concat(
         objs=[
             df_g_price_1,
-            df_up_a_down_5pct_2,
-            df_tm_grade_3,
-            df_t5_pct_4,
-            df_t5_amplitude_5,
-            df_turnover_6,
-            df_alpha_7,
+            df_limit_2,
+            df_exceed_industry_3,
+            df_concentration_4,
         ],
         axis=0,
         join="outer",
     )
     df_stocks_pool = df_stocks_pool[~df_stocks_pool.index.duplicated(keep="first")]
+    list_ssb_index = ["ssb_tail", "ssb_2000"]
     df_stocks_pool = df_stocks_pool[
-        (df_stocks_pool["list_days"] > 540)
-        & (df_stocks_pool["up_times"] >= 4)
-        & (df_stocks_pool["now_price"] <= 25)
-        & (df_stocks_pool["up_A_down_7pct"] >= 12)
-        & (df_stocks_pool["up_A_down_5pct"] >= 24)
-        & (df_stocks_pool["up_A_down_3pct"] >= 48)
-        & (df_stocks_pool["turnover"] <= 40)
+        (df_stocks_pool["list_days"] > 365)
+        & (df_stocks_pool["up_10pct_times"] >= 4)
         & (df_stocks_pool["industry_code"].isin(values=list_industry_code_deviation))
         & (~df_stocks_pool["name"].str.contains("ST").fillna(False))
         & (~df_stocks_pool["ST"].str.contains("ST").fillna(False))
+        & (~df_stocks_pool.index.str.contains("sh68"))
+        & (~df_stocks_pool.index.str.contains("bj"))
+        & (df_stocks_pool["ssb_index"].isin(values=list_ssb_index))
     ]
     df_stocks_pool["factor_count"] = 1
     df_stocks_pool["factor"] = None
@@ -183,46 +162,50 @@ def chip() -> object | DataFrame:
                 df_stocks_pool.at[symbol, "factor_count"] += 1
             else:
                 df_stocks_pool.at[symbol, "factor"] = "[G_price]"
-        if symbol in df_up_a_down_5pct_2.index:
+        if symbol in df_limit_2.index:
             if pd.notnull(df_stocks_pool.at[symbol, "factor"]):
-                df_stocks_pool.at[symbol, "factor"] += ",[up_A_down_5pct]"
+                df_stocks_pool.at[symbol, "factor"] += ",[limit]"
                 df_stocks_pool.at[symbol, "factor_count"] += 1
             else:
-                df_stocks_pool.at[symbol, "factor"] = "[up_A_down_5pct]"
-        if symbol in df_tm_grade_3.index:
+                df_stocks_pool.at[symbol, "factor"] = "[limit]"
+        if symbol in df_exceed_industry_3.index:
             if pd.notnull(df_stocks_pool.at[symbol, "factor"]):
-                df_stocks_pool.at[symbol, "factor"] += ",[tm_grade]"
+                df_stocks_pool.at[symbol, "factor"] += ",[exceed_industry]"
                 df_stocks_pool.at[symbol, "factor_count"] += 1
             else:
-                df_stocks_pool.at[symbol, "factor"] = "[tm_grade]"
-        if symbol in df_t5_pct_4.index:
+                df_stocks_pool.at[symbol, "factor"] = "[exceed_industry]"
+        if symbol in df_concentration_4.index:
             if pd.notnull(df_stocks_pool.at[symbol, "factor"]):
-                df_stocks_pool.at[symbol, "factor"] += ",[t5_pct]"
+                df_stocks_pool.at[symbol, "factor"] += ",[concentration]"
                 df_stocks_pool.at[symbol, "factor_count"] += 1
             else:
-                df_stocks_pool.at[symbol, "factor"] = "[t5_pct]"
-        if symbol in df_t5_amplitude_5.index:
-            if pd.notnull(df_stocks_pool.at[symbol, "factor"]):
-                df_stocks_pool.at[symbol, "factor"] += ",[t5_amplitude]"
-                df_stocks_pool.at[symbol, "factor_count"] += 1
-            else:
-                df_stocks_pool.at[symbol, "factor"] = "[t5_amplitude]"
-        if symbol in df_turnover_6.index:
-            if pd.notnull(df_stocks_pool.at[symbol, "factor"]):
-                df_stocks_pool.at[symbol, "factor"] += ",[turnover]"
-                df_stocks_pool.at[symbol, "factor_count"] += 1
-            else:
-                df_stocks_pool.at[symbol, "factor"] = "[turnover]"
-        if symbol in df_alpha_7.index:
-            if pd.notnull(df_stocks_pool.at[symbol, "factor"]):
-                df_stocks_pool.at[symbol, "factor"] += ",[alpha]"
-                df_stocks_pool.at[symbol, "factor_count"] += 1
-            else:
-                df_stocks_pool.at[symbol, "factor"] = "[turnover]"
-    df_stocks_pool = df_stocks_pool[df_stocks_pool["factor_count"] > 2]
+                df_stocks_pool.at[symbol, "factor"] = "[concentration]"
+    # df_stocks_pool = df_stocks_pool[df_stocks_pool["factor_count"] > 2]
     df_stocks_pool.sort_values(
         by=["factor_count", "factor"], ascending=False, inplace=True
     )
+    df_stocks_pool = df_stocks_pool[
+        [
+            "name",
+            "list_days",
+            "ssb_index",
+            "total_mv_E",
+            "factor_count",
+            "ST",
+            "industry_code",
+            "industry_name",
+            "times_exceed_correct_industry",
+            "mean_exceed_correct_industry",
+            "times_concentration",
+            "rate_concentration",
+            "correct_3pct_times",
+            "now_price",
+            "now_price_ratio",
+            "G_price",
+            "dt",
+            "factor",
+        ]
+    ]
     analysis.base.write_obj_to_db(
         obj=df_stocks_pool, key="df_stocks_pool", filename=filename_chip_shelve
     )

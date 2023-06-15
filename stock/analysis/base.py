@@ -17,8 +17,6 @@ from analysis.const import (
     dt_am_0910,
     dt_pm_end,
     dt_pm_end_last_1T,
-    str_date_path,
-    path_check,
     filename_chip_shelve,
 )
 
@@ -211,14 +209,17 @@ def shelve_to_excel(filename_shelve: str, filename_excel: str):
             return False
 
     i_file = 0
+    filename_excel_new = filename_excel
     while True:
-        if is_open(filename=filename_excel):
-            logger.trace(f"[{filename_excel}] is open")
-        else:
-            logger.trace(f"[{filename_excel}] is not open")
-            break
         i_file += 1
-        filename_excel = os.path.join(path_check, f"chip_{str_date_path}_{i_file}.xlsx")
+        if is_open(filename=filename_excel_new):
+            logger.trace(f"[{filename_excel_new}] is open")
+        else:
+            logger.trace(f"[{filename_excel_new}] is not open")
+            break
+        path, ext = os.path.splitext(filename_excel)
+        path += f"_{i_file}"
+        filename_excel_new = path + ext
     try:
         logger.trace(f"try open [{filename_shelve}]")
         with shelve.open(filename=filename_shelve, flag="r") as py_dbm_chip:

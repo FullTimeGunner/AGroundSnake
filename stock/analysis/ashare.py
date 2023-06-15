@@ -8,11 +8,16 @@ import requests
 import datetime
 import pandas as pd
 from loguru import logger
+from fake_useragent import UserAgent
+
+
+ua = UserAgent()
 
 
 headers = {
+    "Accept": "*/*",
     "Accept-Encoding": "gzip, deflate, sdch",
-    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.100 Safari/537.36",
+    "User-Agent": ua.random,
 }
 
 
@@ -168,7 +173,7 @@ def get_history_n_min_tx(
         data = rs.json()
         data = data["data"][symbol][frequency]
     except TypeError as e:
-        logger.error(f"{repr(e)}")
+        logger.error(f"[{symbol}] - {repr(e)}")
         return pd.DataFrame()
     df_qq = pd.DataFrame(
         data=data,

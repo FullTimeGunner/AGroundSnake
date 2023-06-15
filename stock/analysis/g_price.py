@@ -2,15 +2,16 @@
 from __future__ import annotations
 import os
 import time
+import datetime
 import random
 import feather
 import pandas as pd
 import numpy as np
-from scipy.constants import golden
 from loguru import logger
 import analysis.update_data
 import analysis.base
 from analysis.const import (
+    phi,
     path_main,
     path_data,
     str_date_path,
@@ -20,7 +21,9 @@ from analysis.const import (
 )
 
 
-def golden_price(list_code: list | str = None, frequency: str = "1m") -> bool:
+def golden_price(
+    list_code: list | str = list_all_stocks, frequency: str = "1m"
+) -> bool:
     """
     :param list_code: e.g.sh600519
     :param frequency: choice of {"1m" ,"5m"}
@@ -29,12 +32,21 @@ def golden_price(list_code: list | str = None, frequency: str = "1m") -> bool:
     logger.trace("Golden Price Analysis Begin")
     kline: str = f"update_kline_{frequency}"
     name: str = f"df_golden"
+    # 判断Kline是不是最新的
+    if analysis.base.is_latest_version(key=kline, filename=filename_chip_shelve):
+        pass
+    else:
+        logger.trace("Update the Kline")
+        if analysis.update_data.update_stock_data():
+            logger.trace("{kline} Update finish")
+        else:
+            return False
+    if analysis.base.is_latest_version(key=name, filename=filename_chip_shelve):
+        logger.trace("Golden Price Analysis Break End")
+        return True
     dt_golden = dt_init
+    dt_pass = datetime.datetime(year=1990, month=1, day=1, hour=15)
     start_loop_time = time.perf_counter_ns()
-    phi = 1 / golden  # extreme and mean ratio 黄金分割常数
-    if list_code is None:
-        logger.trace("list_code is None")
-        list_code = list_all_stocks
     if isinstance(list_code, str):
         list_code = [list_code]
     path_kline = os.path.join(path_main, "data", f"kline_{frequency}")
@@ -43,27 +55,9 @@ def golden_price(list_code: list | str = None, frequency: str = "1m") -> bool:
     filename_df_golden_temp = os.path.join(
         path_data, f"df_golden_temp_{str_date_path()}.ftr"
     )
-    # 判断Kline是不是最新的
-    if analysis.base.is_latest_version(key=kline, filename=filename_chip_shelve):
-        pass
-    else:
-        logger.trace("Update the Kline")
-        if analysis.update_data.update_stock_data():
-            logger.trace("{kline} Update finish")
-    if analysis.base.is_latest_version(key=name, filename=filename_chip_shelve):
-        logger.trace("Golden Price Analysis Break End")
-        return True  # df_golden is object
-    list_golden_exist = list()
     if os.path.exists(filename_df_golden_temp):
-        logger.trace(f"[{filename_df_golden_temp}] load feather")
         df_golden = feather.read_dataframe(source=filename_df_golden_temp)
-        if df_golden.empty:
-            logger.trace("df_golden cache is empty")
-        else:
-            logger.trace("df_golden cache is not empty")
-            list_golden_exist = df_golden.index.to_list()
     else:
-        logger.trace(f"[{filename_df_golden_temp}] not exists")
         list_columns = [
             "dt",
             "total_volume",
@@ -73,15 +67,22 @@ def golden_price(list_code: list | str = None, frequency: str = "1m") -> bool:
             "G_price",
             "G_price_volume",
         ]
-        df_golden = pd.DataFrame(columns=list_columns)
+        df_golden = pd.DataFrame(index=list_code, columns=list_columns)
+        df_golden["dt"].fillna(value=dt_init, inplace=True)
+        df_golden.fillna(value=0, inplace=True)
+        feather.write_dataframe(df=df_golden, dest=filename_df_golden_temp)
+        df_golden.to_csv("df_golden.csv")
+    if df_golden.empty:
+        logger.error("df_golden empty")
+        return False
+    df_golden = df_golden.sample(frac=1)
     df_now_price = analysis.ashare.stock_zh_a_spot_em()
     i = 0
-    all_record = len(list_code)
-    logger.trace(f"for loop Begin")
-    for symbol in list_code:
+    all_record = len(df_golden)
+    for symbol in df_golden.index:
         i += 1
         str_msg_bar = f"{name}:[{i:4d}/{all_record:4d}] -- [{symbol}]"
-        if symbol in list_golden_exist:
+        if df_golden.at[symbol, "dt"] != dt_init:
             print(f"\r{str_msg_bar} - exist\033[K", end="")
             continue
         file_name_data_feather = os.path.join(path_kline, f"{symbol}.ftr")
@@ -89,7 +90,8 @@ def golden_price(list_code: list | str = None, frequency: str = "1m") -> bool:
             # 找到kline，读取腌制数据 df_data
             df_data = feather.read_dataframe(source=file_name_data_feather)
         else:
-            print(f"\r{str_msg_bar} - None\033[K", end="")
+            df_golden.at[symbol, "dt"] = dt_pass
+            print(f"\r{str_msg_bar} - None\033[K")
             continue
         df_data = df_data.iloc[-57600:]  # 取得最近1个整年的交易记录，240x240=57600算头不算尾
         dt_max = df_data.index.max()

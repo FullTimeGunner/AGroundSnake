@@ -3,6 +3,7 @@ import os
 import datetime
 import random
 import tushare as ts
+from scipy.constants import golden
 
 
 def latest_trading_day(days: int = None) -> datetime.datetime:
@@ -86,8 +87,7 @@ time_am_end = datetime.time(hour=11, minute=30, second=0, microsecond=0)
 time_pm_start = datetime.time(hour=13, minute=0, second=0, microsecond=0)
 time_pm_1457 = datetime.time(hour=14, minute=57, second=0, microsecond=0)
 time_pm_end = datetime.time(hour=15, minute=0, second=0, microsecond=0)
-dt_init = datetime.datetime(year=1989, month=1, day=1)
-dt_date_init = datetime.date(year=1989, month=1, day=1)
+dt_init = datetime.datetime(year=1989, month=1, day=1, hour=15)
 dt_am_0500 = datetime.datetime.combine(dt_date_trading, time_am_0500)
 dt_am_0910 = datetime.datetime.combine(dt_date_trading, time_am_0910)
 dt_am_1015 = datetime.datetime.combine(dt_date_trading, time_am_1015)
@@ -132,3 +132,5 @@ filename_concentration_rate_charts = os.path.join(
 list_all_stocks = all_chs_code()
 fall = -5
 rise = 10000 / (100 + fall) - 100  # rise = 5.26315789473683
+phi = 1 / golden  # extreme and mean ratio 黄金分割常数
+phi_100 = phi * 100

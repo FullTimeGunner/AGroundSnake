@@ -10,7 +10,7 @@ from loguru import logger
 from console import fg
 import analysis
 from analysis import (
-    dt_date_trading,
+    dt_trading,
     dt_init,
     dt_am_0910,
     dt_am_start,
@@ -291,11 +291,11 @@ if __name__ == "__main__":
                             if pd.isnull(df_trader.at[code, "date_of_inclusion_first"]):
                                 df_trader.at[
                                     code, "date_of_inclusion_first"
-                                ] = dt_date_trading
+                                ] = dt_trading
                             else:
                                 df_trader.at[
                                     code, "date_of_inclusion_latest"
-                                ] = dt_date_trading
+                                ] = dt_trading
                             if pd.isnull(df_trader.at[code, "times_of_inclusion"]):
                                 df_trader.at[code, "times_of_inclusion"] = 1
                             if pd.isnull(df_trader.at[code, "price_of_inclusion"]):
@@ -387,10 +387,13 @@ if __name__ == "__main__":
                 now_price = df_realtime.at[code, "close"]
                 pct_chg = (now_price / df_trader.at[code, "recent_price"] - 1) * 100
                 pct_chg = round(pct_chg, 2)
-                pct_of_inclusion = (
-                    now_price / df_trader.at[code, "price_of_inclusion"] - 1
-                ) * 100
-                pct_of_inclusion = round(pct_of_inclusion, 2)
+                if df_trader.at[code, "price_of_inclusion"] != 0:
+                    pct_of_inclusion = (
+                        now_price / df_trader.at[code, "price_of_inclusion"] - 1
+                    ) * 100
+                    pct_of_inclusion = round(pct_of_inclusion, 2)
+                else:
+                    pct_of_inclusion = 0
                 df_trader.at[code, "now_price"] = now_price
                 df_trader.at[code, "pct_chg"] = pct_chg
                 df_trader.at[code, "pct_of_inclusion"] = pct_of_inclusion
@@ -542,9 +545,11 @@ if __name__ == "__main__":
                     print(msg_signal)
                     print("=" * 86)
             if msg_signal_t0:
+                print(f"====<T0>====", "=" * 74)
                 print(msg_signal_t0)
                 print("=" * 86)
             if msg_signal_chg:
+                print(f"====<Change>====", "=" * 70)
                 print(msg_signal_chg)
                 print("=" * 86)
             # 更新df_data，str_msg_rise，str_msg_fall------End
@@ -568,6 +573,7 @@ if __name__ == "__main__":
             if list_signal_chg:
                 print(f"{str_dt_now_time}----New Signal: {list_signal_chg}\a")
                 print("*" * 86)
+            print("=" * 86)
             print(list_industry_name_deviation)
             print("=" * 86)
             if list_industry_buying:
