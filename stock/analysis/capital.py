@@ -1,6 +1,7 @@
 import os
 import time
 import datetime
+import random
 import feather
 import pandas as pd
 import tushare as ts
@@ -8,11 +9,10 @@ from loguru import logger
 import analysis
 from analysis.const import (
     time_pm_end,
-    dt_pm_end,
     dt_init,
     path_data,
     str_date_path,
-    str_date_trading,
+    str_dt_history,
     dt_date_trading,
     filename_chip_shelve,
 )
@@ -28,6 +28,7 @@ def capital() -> bool:
     filename_cap_feather_temp = os.path.join(
         path_data, f"capital_temp_{str_date_path()}.ftr"
     )
+    str_dt_end = str_dt_history()
     if os.path.exists(filename_cap_feather_temp):
         df_cap = feather.read_dataframe(source=filename_cap_feather_temp)
     else:
@@ -43,7 +44,7 @@ def capital() -> bool:
         df_stock_basic.set_index(keys="ts_code", inplace=True)
         df_daily_basic = pro.daily_basic(
             ts_code="",
-            trade_date=str_date_trading,
+            trade_date=str_dt_end,
             fields="trade_date,ts_code,float_share,total_share,total_mv",
         )
         df_daily_basic["ts_code"] = df_daily_basic["ts_code"].apply(
@@ -93,7 +94,8 @@ def capital() -> bool:
         i += 1
         if df_cap.at[symbol, "trade_date"] != dt_init:
             continue
-        feather.write_dataframe(df=df_cap, dest=filename_cap_feather_temp)
+        if random.randint(0, 5) == 3:
+            feather.write_dataframe(df=df_cap, dest=filename_cap_feather_temp)
         str_msg_bar = f"Capital Update: [{i:4d}/{count:4d}] - [{symbol}]"
         ts_code = symbol[2:] + "." + symbol[:2].upper()
         df_daily_basic = pd.DataFrame()
@@ -104,7 +106,7 @@ def capital() -> bool:
                 df_daily_basic = pro.daily_basic(
                     ts_code=ts_code,
                     start_date=str_delta,
-                    end_date=str_date_trading,
+                    end_date=str_dt_end,
                     fields="trade_date,ts_code,float_share,total_share,total_mv",
                 )
             except KeyError as e:
@@ -138,7 +140,7 @@ def capital() -> bool:
             df_daily_basic.at[dt_max, "total_mv"] / 10000, 2
         )
         df_cap.at[symbol, "list_days"] = (
-                dt_trader - df_cap.at[symbol, "list_date"]
+            dt_trader - df_cap.at[symbol, "list_date"]
         ).days
     df_cap = df_cap.reindex(
         columns=["name", "list_days", "total_cap", "circ_cap", "total_mv_E"]
@@ -148,8 +150,7 @@ def capital() -> bool:
         analysis.base.write_obj_to_db(
             obj=df_cap, key=name, filename=filename_chip_shelve
         )
-        if dt_trader == dt_pm_end:
-            analysis.base.set_version(key=name, dt=dt_trader)
+        analysis.base.set_version(key=name, dt=dt_trader)
         if os.path.exists(filename_cap_feather_temp):  # 删除临时文件
             os.remove(path=filename_cap_feather_temp)
     end_loop_time = time.perf_counter_ns()

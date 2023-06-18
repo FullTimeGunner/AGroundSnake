@@ -60,7 +60,7 @@ def init_trader(df_trader: pd.DataFrame, sort: bool = False) -> pd.DataFrame:
         if code in df_chip.index:
             t5_amplitude = df_chip.at[code, "T5_amplitude"]
             t5_pct = df_chip.at[code, "T5_pct"]
-            up_10pct_times = int(df_chip.at[code, "up_10pct_times"])
+            correct_7pct_times = int(df_chip.at[code, "correct_7pct_times"])
             g_price = df_chip.at[code, "G_price"]
             now_price_ratio = round(df_chip.at[code, "now_price_ratio"], 1)
             if df_realtime.empty:
@@ -92,7 +92,10 @@ def init_trader(df_trader: pd.DataFrame, sort: bool = False) -> pd.DataFrame:
             df_trader.at[code, "position_unit"] = (
                 df_trader.at[code, "position"] / df_trader.at[code, "trx_unit_share"]
             ).round(2)
-            if df_trader.at[code, "position"] == 0 and df_trader.at[code, "position"] > phi_100:
+            if (
+                df_trader.at[code, "position"] == 0
+                and df_trader.at[code, "position"] > phi_100
+            ):
                 df_trader.at[code, "recent_price"] = g_price
             pct_chg = (
                 df_trader.at[code, "now_price"] / df_trader.at[code, "recent_price"] - 1
@@ -120,15 +123,15 @@ def init_trader(df_trader: pd.DataFrame, sort: bool = False) -> pd.DataFrame:
             pct_of_inclusion = round(pct_of_inclusion, 2)
             df_trader.at[code, "pct_of_inclusion"] = pct_of_inclusion
             df_trader.at[code, "stock_index"] = (
-                f"({up_10pct_times:2.0f}U /"
+                f"([{correct_7pct_times:2.0f}]SPT /"
                 f"{now_price_ratio:6.2f}% -"
-                f"{g_price:6.2f}$)--"
+                f"{g_price:6.2f}GP)--"
                 f"[T5_amp:{t5_amplitude:5.2f}]-"
                 f"[T5_pct:{t5_pct:5.2f}]"
             )
-            if up_10pct_times >= 12:
+            if correct_7pct_times >= 12:
                 grade_ud_limit = "A"
-            elif 8 <= up_10pct_times < 12:
+            elif 8 <= correct_7pct_times < 12:
                 grade_ud_limit = "B"
             else:
                 grade_ud_limit = "Z"

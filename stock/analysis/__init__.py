@@ -6,7 +6,7 @@ from analysis.position import position
 from analysis.unit_net import unit_net
 from analysis.initialization import init_trader
 from analysis.concentration import concentration_rate, concentration
-from analysis.st import non_standard_opinions, st_income
+from analysis.st import st_income
 from analysis.const import *
 from analysis.base import (
     is_trading_day,

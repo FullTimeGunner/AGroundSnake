@@ -41,13 +41,13 @@ def limit_count(list_symbol: list | str = None) -> bool:
         return True
     if os.path.exists(file_name_df_limit_temp):
         df_limit = feather.read_dataframe(source=file_name_df_limit_temp)
-        if not df_limit.empty:
-            df_limit = df_limit.sample(frac=1)
+        df_limit = df_limit.sample(frac=1)
     else:
         list_columns = [
             "times_limit",
-            "up_10pct_times",
-            "down_10pct_times",
+            "up_7pct_times",
+            "down_7pct_times",
+            "correct_7pct_times",
             "up_3pct_times",
             "down_3pct_times",
             "correct_3pct_times",
@@ -64,10 +64,12 @@ def limit_count(list_symbol: list | str = None) -> bool:
         df_limit = pd.DataFrame(index=list_symbol, columns=list_columns)
     df_limit.fillna(value=0, inplace=True)
     i = 0
-    count = len(list_symbol)
+    count = len(df_limit)
     logger.trace(f"For loop Begin")
-    for symbol in list_symbol:
+    for symbol in df_limit.index:
         i += 1
+        if random.randint(0, 5) == 3:
+            feather.write_dataframe(df=df_limit, dest=file_name_df_limit_temp)
         str_msg_bar = f"Limit Update: [{i:4d}/{count:4d}] - [{symbol}]"
         if df_limit.at[symbol, "times_limit"] != 0:
             print(f"\r{str_msg_bar} - Exist\033[K", end="")
@@ -125,10 +127,14 @@ def limit_count(list_symbol: list | str = None) -> bool:
         if dt_limit < dt_stock_latest:
             dt_limit = dt_stock_latest
         df_limit.at[symbol, "times_limit"] = len(df_stock)
-        df_up_10pct = df_stock[df_stock["pct_chg"] > 9.9]
-        df_limit.at[symbol, "up_10pct_times"] = len(df_up_10pct)
-        df_down_10pct = df_stock[df_stock["pct_chg"] < -9.9]
-        df_limit.at[symbol, "down_10pct_times"] = len(df_down_10pct)
+        df_up_10pct = df_stock[df_stock["pct_chg"] > 7]
+        df_limit.at[symbol, "up_7pct_times"] = len(df_up_10pct)
+        df_down_10pct = df_stock[df_stock["pct_chg"] < -7]
+        df_limit.at[symbol, "down_7pct_times"] = len(df_down_10pct)
+        df_limit.at[symbol, "correct_7pct_times"] = (
+            df_limit.at[symbol, "up_7pct_times"]
+            - df_limit.at[symbol, "down_7pct_times"]
+        )
         df_up_3pct = df_stock[df_stock["pct_chg"] > 3]
         df_limit.at[symbol, "up_3pct_times"] = up_3pct_times = len(df_up_3pct)
         df_down_3pct = df_stock[df_stock["pct_chg"] < -3]
@@ -169,14 +175,12 @@ def limit_count(list_symbol: list | str = None) -> bool:
         df_limit.at[symbol, "alpha_turnover"] = (
             df_limit.at[symbol, "T5_turnover"] - df_limit.at[symbol, "T240_turnover"]
         )
-        if random.randint(0, 5) == 3:
-            feather.write_dataframe(df=df_limit, dest=file_name_df_limit_temp)
         print(f"\r{str_msg_bar}\033[K", end="")  # for loop end, progress bar
     if i >= count:
         print("\n", end="")  # 格式处理
         logger.trace(f"For loop End")
         df_limit.sort_values(
-            by=["times_limit", "up_10pct_times", "down_10pct_times"],
+            by=["correct_3pct_times", "correct_7pct_times", "alpha_amplitude"],
             ascending=False,
             inplace=True,
         )
@@ -186,7 +190,6 @@ def limit_count(list_symbol: list | str = None) -> bool:
         analysis.base.set_version(key=name, dt=dt_limit)
         if os.path.exists(file_name_df_limit_temp):
             os.remove(path=file_name_df_limit_temp)
-            logger.trace(f"[{file_name_df_limit_temp}] remove")
     end_loop_time = time.perf_counter_ns()
     interval_time = (end_loop_time - start_loop_time) / 1000000000
     str_gm = time.strftime("%H:%M:%S", time.gmtime(interval_time))

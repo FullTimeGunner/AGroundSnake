@@ -66,7 +66,7 @@ def chip() -> object | DataFrame:
                 key="df_industry_rank", filename=filename_chip_shelve
             )
             df_industry_rank_deviation = df_industry_rank[
-                df_industry_rank["max_min"] >= 60
+                df_industry_rank["max_min_minus"] >= 60
             ]
             list_industry_code_deviation = df_industry_rank_deviation.index.tolist()
             break
@@ -145,7 +145,7 @@ def chip() -> object | DataFrame:
     list_ssb_index = ["ssb_tail", "ssb_2000"]
     df_stocks_pool = df_stocks_pool[
         (df_stocks_pool["list_days"] > 365)
-        & (df_stocks_pool["up_10pct_times"] >= 4)
+        & (df_stocks_pool["correct_7pct_times"] >= 4)
         & (df_stocks_pool["industry_code"].isin(values=list_industry_code_deviation))
         & (~df_stocks_pool["name"].str.contains("ST").fillna(False))
         & (~df_stocks_pool["ST"].str.contains("ST").fillna(False))
@@ -218,14 +218,15 @@ def chip() -> object | DataFrame:
         print(f"[{name}] is not found in df_config -Error[{repr(e)}]")
         logger.trace(f"[{name}] is not found in df_config -Error[{repr(e)}]")
         df_config_temp = df_config.copy()
-    analysis.base.shelve_to_excel(
-        filename_shelve=filename_chip_shelve, filename_excel=filename_chip_excel
-    )
     dt_chip = df_config_temp["date"].min()
     analysis.base.set_version(key=name, dt=dt_chip)
+    if not analysis.base.shelve_to_excel(
+        filename_shelve=filename_chip_shelve, filename_excel=filename_chip_excel
+    ):
+        logger.error(f"{name} Save Error")
     end_loop_time = time.perf_counter_ns()
     interval_time = (end_loop_time - start_loop_time) / 1000000000
     str_gm = time.strftime("%H:%M:%S", time.gmtime(interval_time))
     print(f"Chip analysis takes [{str_gm}]")
-    logger.trace("Chip End")
+    logger.trace(f"{name} End")
     return df_chip

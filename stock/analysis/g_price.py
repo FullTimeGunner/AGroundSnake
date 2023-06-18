@@ -57,6 +57,7 @@ def golden_price(
     )
     if os.path.exists(filename_df_golden_temp):
         df_golden = feather.read_dataframe(source=filename_df_golden_temp)
+        df_golden = df_golden.sample(frac=1)
     else:
         list_columns = [
             "dt",
@@ -75,7 +76,6 @@ def golden_price(
     if df_golden.empty:
         logger.error("df_golden empty")
         return False
-    df_golden = df_golden.sample(frac=1)
     df_now_price = analysis.ashare.stock_zh_a_spot_em()
     i = 0
     all_record = len(df_golden)

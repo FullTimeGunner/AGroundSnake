@@ -109,12 +109,22 @@ def str_date_path() -> str:
 
 def str_trading_path() -> str:
     dt_now = datetime.datetime.now()
-    if dt_now < dt_am_0500:
+    if dt_now < dt_am_0910:
         return dt_date_trading_last_1T.strftime("%Y_%m_%d")
-    elif dt_am_0500 < dt_now < dt_pm_end:
+    elif dt_am_0910 < dt_now < dt_pm_end:
         return dt_date_trading.strftime("%Y_%m_%d")
     else:
         return dt_trading_last_T1.strftime("%Y_%m_%d")
+
+
+def str_dt_history() -> str:
+    dt_now = datetime.datetime.now()
+    if dt_now < dt_am_0910:
+        return dt_date_trading_last_1T.strftime("%Y%m%d")
+    elif dt_am_0910 < dt_now < dt_pm_end:
+        return dt_date_trading.strftime("%Y%m%d")
+    else:
+        return dt_trading_last_T1.strftime("%Y%m%d")
 
 
 filename_log = os.path.join(path_log, "log{time}.log")
@@ -124,7 +134,6 @@ filename_chip_shelve = os.path.join(path_data, f"chip")
 filename_market_values_shelve = os.path.join(path_mv, f"mv")
 filename_chip_excel = os.path.join(path_check, f"chip_{str_date_path()}.xlsx")
 filename_signal = os.path.join(path_check, f"signal_{str_trading_path()}.xlsx")
-filename_data_csv = os.path.join(path_check, f"trader_{str_trading_path()}.csv")
 filename_index_charts = os.path.join(path_check, f"index_charts.html")
 filename_concentration_rate_charts = os.path.join(
     path_check, f"concentration_rate_charts.html"

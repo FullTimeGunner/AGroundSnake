@@ -23,9 +23,10 @@ from analysis import (
     filename_log,
     filename_input,
     filename_signal,
-    filename_data_csv,
+    path_check,
     filename_chip_shelve,
     sleep_to_time,
+    str_trading_path,
 )
 
 
@@ -106,10 +107,7 @@ if __name__ == "__main__":
     df_industry_rank = analysis.read_df_from_db(
         key="df_industry_rank", filename=filename_chip_shelve
     )
-    df_industry_rank_deviation = df_industry_rank[df_industry_rank["max_min"] >= 60]
-    list_industry_name_deviation = list()
-    for ti_code in df_industry_rank_deviation.index:
-        list_industry_name_deviation.append(df_industry_rank.at[ti_code, "name"])
+    df_industry_rank_deviation = df_industry_rank[df_industry_rank["max_min"] >= 40]
     # 加载df_industry_rank_pool End
     # 加载df_trader Begin
     df_trader = analysis.read_df_from_db(key="df_trader", filename=filename_chip_shelve)
@@ -147,31 +145,32 @@ if __name__ == "__main__":
     df_stocks_pool = analysis.read_df_from_db(
         key="df_stocks_pool", filename=filename_chip_shelve
     )
-    if df_stocks_pool.empty:
-        dt_inclusion = dt_init
-    else:
+    if not df_stocks_pool.empty:
         dt_inclusion = df_stocks_pool["dt"].max()
-    for code in df_stocks_pool.index:
-        if code not in df_trader.index:
-            df_trader.at[code, "date_of_inclusion_first"] = dt_inclusion
-            df_trader.at[code, "price_of_inclusion"] = df_trader.at[
-                code, "recent_price"
-            ] = df_stocks_pool.at[code, "now_price"]
-            df_trader.at[code, "date_of_inclusion_latest"] = dt_inclusion
-            df_trader.at[code, "times_of_inclusion"] = 1
-        else:
-            if df_trader.at[code, "date_of_inclusion_first"] == dt_init:
+        for code in df_stocks_pool.index:
+            if code not in df_trader.index:
                 df_trader.at[code, "date_of_inclusion_first"] = dt_inclusion
                 df_trader.at[code, "price_of_inclusion"] = df_trader.at[
                     code, "recent_price"
                 ] = df_stocks_pool.at[code, "now_price"]
                 df_trader.at[code, "date_of_inclusion_latest"] = dt_inclusion
                 df_trader.at[code, "times_of_inclusion"] = 1
-            elif df_trader.at[code, "date_of_inclusion_first"] != dt_init:
-                if df_trader.at[code, "date_of_inclusion_latest"] != dt_inclusion:
+            else:
+                if (
+                    df_trader.at[code, "date_of_inclusion_first"] == dt_init
+                    or df_trader.at[code, "date_of_inclusion_latest"] == dt_init
+                ):
+                    df_trader.at[code, "date_of_inclusion_first"] = dt_inclusion
                     df_trader.at[code, "date_of_inclusion_latest"] = dt_inclusion
-                    df_trader.at[code, "times_of_inclusion"] += 1
-    df_trader = analysis.init_trader(df_trader=df_trader, sort=False)
+                    df_trader.at[code, "price_of_inclusion"] = df_trader.at[
+                        code, "recent_price"
+                    ] = df_stocks_pool.at[code, "now_price"]
+                    df_trader.at[code, "times_of_inclusion"] = 1
+                else:
+                    if df_trader.at[code, "date_of_inclusion_latest"] != dt_inclusion:
+                        df_trader.at[code, "date_of_inclusion_latest"] = dt_inclusion
+                        df_trader.at[code, "times_of_inclusion"] += 1
+        df_trader = analysis.init_trader(df_trader=df_trader, sort=False)
     # 保存df_trader----Begin
     analysis.write_obj_to_db(
         obj=df_trader, key="df_trader", filename=filename_chip_shelve
@@ -381,9 +380,6 @@ if __name__ == "__main__":
             for code in df_trader.index:
                 i += 1
                 dt_now = datetime.datetime.now()
-                str_dt_now_time = dt_now.strftime("<%H:%M:%S>")
-                str_msg = f"{str_dt_now_time}----[{i:3d}/{count_trader:3d}]"
-                print(f"\r{str_msg}\033[K", end="")
                 now_price = df_realtime.at[code, "close"]
                 pct_chg = (now_price / df_trader.at[code, "recent_price"] - 1) * 100
                 pct_chg = round(pct_chg, 2)
@@ -410,12 +406,11 @@ if __name__ == "__main__":
                     df_signal_sell.loc[code] = df_trader.loc[code]
                 if code in df_signal_buy.index:
                     df_signal_buy.loc[code] = df_trader.loc[code]
-            if i >= count_trader:
-                print("\n", end="")  # 调整输出console格式
             analysis.write_obj_to_db(
                 obj=df_trader, key="df_trader", filename=filename_chip_shelve
             )
             if frq % 3 == 0:
+                filename_data_csv = os.path.join(path_check, f"trader_{str_trading_path()}.csv")
                 df_trader.to_csv(path_or_buf=filename_data_csv)
             list_signal_buy_after = df_signal_buy.index.tolist()
             list_signal_sell_after = df_signal_sell.index.tolist()
@@ -427,8 +422,6 @@ if __name__ == "__main__":
                 if code not in list_signal_sell_before:
                     list_signal_chg.append(code)
             if list_signal_chg:
-                print(f"{filename_signal} save")
-                print("=" * 86)
                 with pd.ExcelWriter(path=filename_signal, mode="w") as writer:
                     df_signal_sell.to_excel(excel_writer=writer, sheet_name="sell")
                     df_signal_buy.to_excel(excel_writer=writer, sheet_name="buy")
@@ -460,11 +453,7 @@ if __name__ == "__main__":
             msg_signal_t0 = ""
             i = 0
             for item in dict_df_signal:
-                dt_now = datetime.datetime.now()
-                str_dt_now_time = dt_now.strftime("<%H:%M:%S>")
-                str_msg = f"{str_dt_now_time}----[{item}]"
                 msg_signal = ""
-
                 if item in "Buy":
                     str_arrow = "↓"
                 elif item in "Sell":
@@ -476,7 +465,6 @@ if __name__ == "__main__":
                 all_records = len(df_item)
                 for code in df_item.index:
                     i_records += 1
-                    print(f"\r{str_msg} - [{i_records}/{all_records}]\033[K", end="")
                     if code not in dict_list_signal_on[item]:
                         continue
                     msg_signal_code_1 = (
@@ -490,14 +478,17 @@ if __name__ == "__main__":
                     msg_signal_code_2 = f" - [{df_trader.at[code, 'ST']}]"
                     industry_code = df_item.at[code, "industry_code"]
                     msg_signal_code_3 = (
-                        f"---- [{df_trader.at[code, 'industry_name']}] - [{industry_code}] "
-                        f" - [{df_industry_rank.at[industry_code, 'T5_rank']:2.0f} - "
-                        f"{df_industry_rank.at[industry_code, 'T20_rank']:02.0f} - "
-                        f"{df_industry_rank.at[industry_code, 'T40_rank']:02.0f} - "
-                        f"{df_industry_rank.at[industry_code, 'T60_rank']:02.0f} - "
-                        f"{df_industry_rank.at[industry_code, 'T80_rank']:02.0f}] - "
+                        f"---- [{df_trader.at[code, 'industry_name']}] - [{industry_code}] - "
                         f"[Diff={df_industry_rank.at[industry_code, 'max_min']:02.0f}]"
                     )
+                    if industry_code in df_industry_rank_deviation.index:
+                        msg_signal_code_3 += (
+                            f" - [{df_industry_rank_deviation.at[industry_code, 'T5_rank']:2.0f} - "
+                            f"{df_industry_rank_deviation.at[industry_code, 'T20_rank']:02.0f} - "
+                            f"{df_industry_rank_deviation.at[industry_code, 'T40_rank']:02.0f} - "
+                            f"{df_industry_rank_deviation.at[industry_code, 'T60_rank']:02.0f} - "
+                            f"{df_industry_rank_deviation.at[industry_code, 'T80_rank']:02.0f}]"
+                        )
                     msg_signal_code_4 = f"---- [{df_trader.at[code, 'grade']}]"
                     msg_signal_code_5 = f" - {df_trader.at[code, 'stock_index']}"
                     msg_signal_code_6 = (
@@ -536,7 +527,6 @@ if __name__ == "__main__":
                         msg_signal_t0 += msg_signal_code
                     else:
                         msg_signal += msg_signal_code
-                print("\n", end="")
                 if msg_signal:
                     if item in "Sell":
                         print(f"====<Suggest {item}>====\a", "=" * 60)
@@ -547,35 +537,26 @@ if __name__ == "__main__":
             if msg_signal_t0:
                 print(f"====<T0>====", "=" * 74)
                 print(msg_signal_t0)
-                print("=" * 86)
             if msg_signal_chg:
-                print(f"====<Change>====", "=" * 70)
+                print(f"====<Change>====\a", "=" * 70)
                 print(msg_signal_chg)
-                print("=" * 86)
             # 更新df_data，str_msg_rise，str_msg_fall------End
-
             dt_now = datetime.datetime.now()
             str_dt_now_time = dt_now.strftime("<%H:%M:%S>")
             if str_msg_modified:
                 str_msg_modified = (
                     f"{str_dt_now_time}----modified: {fg.blue(str_msg_modified)}"
                 )
-                print(str_msg_modified)
                 print("=" * 86)
+                print(str_msg_modified)
             if str_msg_add:
                 str_msg_add = f"{str_dt_now_time}----add: {fg.red(str_msg_add)}"
-                print(str_msg_add)
                 print("=" * 86)
+                print(str_msg_add)
             if str_msg_del:
                 str_msg_del = f"{str_dt_now_time}----remove: {fg.green(str_msg_del)}"
-                print(str_msg_del)
                 print("=" * 86)
-            if list_signal_chg:
-                print(f"{str_dt_now_time}----New Signal: {list_signal_chg}\a")
-                print("*" * 86)
-            print("=" * 86)
-            print(list_industry_name_deviation)
-            print("=" * 86)
+                print(str_msg_del)
             if list_industry_buying:
                 print(f"{fg.green(f'Buying: {list_industry_buying}')}")
                 print("*" * 86)

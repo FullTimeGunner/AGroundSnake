@@ -209,17 +209,20 @@ def shelve_to_excel(filename_shelve: str, filename_excel: str):
             return False
 
     i_file = 0
-    filename_excel_new = filename_excel
-    while True:
+    filename_excel_old = filename_excel
+    while i_file <= 5:
         i_file += 1
-        if is_open(filename=filename_excel_new):
-            logger.trace(f"[{filename_excel_new}] is open")
+        if is_open(filename=filename_excel):
+            logger.trace(f"[{filename_excel}] is open")
         else:
-            logger.trace(f"[{filename_excel_new}] is not open")
+            logger.trace(f"[{filename_excel}] is not open")
             break
-        path, ext = os.path.splitext(filename_excel)
+        path, ext = os.path.splitext(filename_excel_old)
         path += f"_{i_file}"
-        filename_excel_new = path + ext
+        filename_excel = path + ext
+    if is_open(filename=filename_excel):
+        logger.error(f"Loop Times out - ({i_file})")
+        return False
     try:
         logger.trace(f"try open [{filename_shelve}]")
         with shelve.open(filename=filename_shelve, flag="r") as py_dbm_chip:
@@ -228,8 +231,7 @@ def shelve_to_excel(filename_shelve: str, filename_excel: str):
                 writer = pd.ExcelWriter(
                     path=filename_excel, mode="a", if_sheet_exists="replace"
                 )
-            except FileNotFoundError as e:
-                logger.trace(f"{filename_excel} is not exist -Error[{repr(e)}]")
+            except FileNotFoundError:
                 with pd.ExcelWriter(path=filename_excel, mode="w") as writer_e:
                     key_random = random.choice(list(py_dbm_chip.keys()))
                     if isinstance(py_dbm_chip[key_random], DataFrame):
@@ -260,7 +262,8 @@ def shelve_to_excel(filename_shelve: str, filename_excel: str):
             writer.close()
             if i >= count:
                 print("\n", end="")  # 格式处理
-                return
+                return True
     except dbm.error as e:
         print(f"[{filename_shelve}] is not exist - Error[{repr(e)}]")
         logger.trace(f"[{filename_shelve}] is not exist - Error[{repr(e)}]")
+        return False

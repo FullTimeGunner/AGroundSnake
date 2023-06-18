@@ -1,7 +1,7 @@
 # modified at 2023/05/18 22::25
 from __future__ import annotations
 import os
-import sys
+import random
 import time
 import datetime
 import requests
@@ -227,6 +227,8 @@ def industry_pct() -> bool:
         if ts_code_index in list_industry_pct_exist:
             print(f"{str_msg_bar} - exist", end="")
             continue
+        if random.randint(0, 5) == 3:
+            feather.write_dataframe(df=df_industry_pct, dest=filename_industry_pct)
         filename_ths_daily = os.path.join(path_industry, f"{symbol_index}.ftr")
         df_ths_daily = feather.read_dataframe(source=filename_ths_daily)
         df_ths_daily_pct = df_ths_daily[["pct_change"]].copy()
@@ -236,7 +238,6 @@ def industry_pct() -> bool:
             axis=1,
             join="outer",
         )
-        feather.write_dataframe(df=df_industry_pct, dest=filename_industry_pct)
         dt_ths_daily = datetime.datetime.combine(df_ths_daily.index.max(), time_pm_end)
         print(f"{str_msg_bar} - {dt_ths_daily}", end="")
     df_industry_pct = df_industry_pct.applymap(func=lambda x: x + 100)
@@ -299,7 +300,8 @@ def industry_rank():
             "T80",
             "T80_Zeroing_sort",
             "T80_rank",
-            "rank",
+            "max_min_plus",
+            "max_min_minus",
             "max_min",
         ]
     )
@@ -347,13 +349,6 @@ def industry_rank():
     df_industry_rank["T80_rank"] = df_industry_rank["T80"].rank(
         axis=0, method="min", ascending=False
     )
-    df_industry_rank["rank"] = (
-        df_industry_rank["T5_rank"]
-        + df_industry_rank["T20_rank"]
-        + df_industry_rank["T40_rank"]
-        + df_industry_rank["T60_rank"]
-        + df_industry_rank["T80_rank"]
-    )
     pro = ts.pro_api()
     df_ths_index = pro.ths_index()
     df_ths_index.set_index(keys="ts_code", inplace=True)
@@ -362,20 +357,32 @@ def industry_rank():
             df_industry_rank.at[ths_index_code, "name"] = df_ths_index.at[
                 ths_index_code, "name"
             ]
-            df_industry_rank.at[ths_index_code, "max_min"] = max(
-                df_industry_rank.at[ths_index_code, "T5_rank"],
-                df_industry_rank.at[ths_index_code, "T20_rank"],
-                df_industry_rank.at[ths_index_code, "T40_rank"],
-                df_industry_rank.at[ths_index_code, "T60_rank"],
-                df_industry_rank.at[ths_index_code, "T80_rank"],
-            ) - min(
+            rank_max = max(
                 df_industry_rank.at[ths_index_code, "T5_rank"],
                 df_industry_rank.at[ths_index_code, "T20_rank"],
                 df_industry_rank.at[ths_index_code, "T40_rank"],
                 df_industry_rank.at[ths_index_code, "T60_rank"],
                 df_industry_rank.at[ths_index_code, "T80_rank"],
             )
-    df_industry_rank.sort_values(by=["max_min"], axis=0, ascending=False, inplace=True)
+            rank_min = min(
+                df_industry_rank.at[ths_index_code, "T5_rank"],
+                df_industry_rank.at[ths_index_code, "T20_rank"],
+                df_industry_rank.at[ths_index_code, "T40_rank"],
+                df_industry_rank.at[ths_index_code, "T60_rank"],
+                df_industry_rank.at[ths_index_code, "T80_rank"],
+            )
+            df_industry_rank.at[ths_index_code, "max_min_minus"] = max_min_minus = (
+                rank_max - rank_min
+            )
+            df_industry_rank.at[ths_index_code, "max_min_plus"] = max_min_plus = (
+                rank_max + rank_min
+            )
+            df_industry_rank.at[ths_index_code, "max_min"] = math.floor(
+                pow(max_min_minus, 2) / max_min_plus
+            )
+    df_industry_rank.sort_values(
+        by=["max_min"], axis=0, ascending=False, inplace=True
+    )
     analysis.base.write_obj_to_db(
         obj=df_industry_rank, key="df_industry_rank", filename=filename_chip_shelve
     )
@@ -454,6 +461,8 @@ def ths_industry() -> bool:
         if df_industry.at[symbol, "times_industry"] != 0:  # 己存在，断点继续
             print(f"\r{str_msg_bar} - Exist\033[K", end="")
             continue
+        if random.randint(0, 5) == 3:
+            feather.write_dataframe(df=df_industry, dest=filename_industry_temp)
         ts_code_index = df_industry.at[symbol, "industry_code"]
         ts_code = analysis.base.code_ths_to_ts(symbol)
         symbol_class = analysis.base.code_ts_to_ths(ts_code_index)
@@ -568,7 +577,6 @@ def ths_industry() -> bool:
                 pow(alpha_mean_min, 2) / alpha_mean_max,
                 2,
             )
-        feather.write_dataframe(df=df_industry, dest=filename_industry_temp)
     print("\n", end="")  # 格式处理
     if i >= count:
         df_industry["up_mean_industry"].fillna(value=0, inplace=True)

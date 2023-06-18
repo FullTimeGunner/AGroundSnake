@@ -164,8 +164,9 @@ class IndexSSB(object):
         i = 0
         times_try = 3
         for symbol in df_mv.index:
+            if random.randint(0, 5) == 3:
+                feather.write_dataframe(df=df_mv, dest=filename_df_mv_temp)
             ts_code = symbol[2:] + "." + symbol[:2]
-            feather.write_dataframe(df=df_mv, dest=filename_df_mv_temp)
             i += 1
             str_msg_bar = f"{name} - {str_df_mv}: [{i:04d}/{count}] - [{symbol}]"
             now_dt = df_mv.at[symbol, "now_dt"]

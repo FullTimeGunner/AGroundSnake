@@ -36,12 +36,14 @@ def update_stock_data(frequency: str = "1m") -> bool:
     if os.path.exists(file_name_catalogue_temp):
         # 读取腌制数据 catalogue
         df_catalogue = feather.read_dataframe(source=file_name_catalogue_temp)
+        df_catalogue = df_catalogue.sample(frac=1)
     else:
-        df_catalogue = pd.DataFrame(index=list_all_stocks, columns=["start", "end", "count"])
+        df_catalogue = pd.DataFrame(
+            index=list_all_stocks, columns=["start", "end", "count"]
+        )
         df_catalogue["start"].fillna(value=dt_init, inplace=True)
         df_catalogue["end"].fillna(value=dt_init, inplace=True)
         df_catalogue["count"].fillna(value=0, inplace=True)
-    df_catalogue = df_catalogue.sample(frac=1)
     count = len(df_catalogue)
     quantity = 80000
     i = 0
@@ -50,7 +52,10 @@ def update_stock_data(frequency: str = "1m") -> bool:
         i += 1
         str_msg = f"Kline Update: [{i:4d}/{count:4d}] -- [{symbol}]"
         if df_catalogue.at[symbol, "end"] == dt_pm_end:
-            print(f"\r{str_msg} - [{df_catalogue.at[symbol, 'end']}] - Latest\033[K", end="")
+            print(
+                f"\r{str_msg} - [{df_catalogue.at[symbol, 'end']}] - Latest\033[K",
+                end="",
+            )
             continue
         df_data = pd.DataFrame()
         file_name_feather = os.path.join(path_kline, f"{symbol}.ftr")
@@ -61,7 +66,10 @@ def update_stock_data(frequency: str = "1m") -> bool:
             df_catalogue.loc[symbol, "start"] = df_data.index.min()
             df_catalogue.loc[symbol, "count"] = len(df_data)
             if df_catalogue.at[symbol, "end"] == dt_pm_end:
-                print(f"\r{str_msg} - [{df_catalogue.loc[symbol, 'end']}] - Latest\033[K", end="")
+                print(
+                    f"\r{str_msg} - [{df_catalogue.loc[symbol, 'end']}] - Latest\033[K",
+                    end="",
+                )
                 continue
         df_delta = pd.DataFrame()
         i_while_delta = 0
@@ -84,9 +92,13 @@ def update_stock_data(frequency: str = "1m") -> bool:
                     break
         if df_delta.empty:
             if df_data.empty:
-                print(f"\r{str_msg} - [{df_catalogue.loc[symbol, 'end']}] - No data\033[K")
+                print(
+                    f"\r{str_msg} - [{df_catalogue.loc[symbol, 'end']}] - No data\033[K"
+                )
             else:
-                print(f"\r{str_msg} - [{df_catalogue.loc[symbol, 'end']}] - Suspension\033[K")
+                print(
+                    f"\r{str_msg} - [{df_catalogue.loc[symbol, 'end']}] - Suspension\033[K"
+                )
             continue
         else:
             if df_data.empty:
@@ -102,7 +114,9 @@ def update_stock_data(frequency: str = "1m") -> bool:
         df_catalogue.loc[symbol, "end"] = dt_data_max
         df_catalogue.loc[symbol, "start"] = df_data.index.min()
         df_catalogue.loc[symbol, "count"] = len(df_data)
-        print(f"\r{str_msg} - [{df_catalogue.loc[symbol, 'end']}]- Update\033[K", end="")
+        print(
+            f"\r{str_msg} - [{df_catalogue.loc[symbol, 'end']}]- Update\033[K", end=""
+        )
     if i >= count:
         print("\n", end="")
         df_catalogue.sort_values(by=["count"], ascending=False, inplace=True)
